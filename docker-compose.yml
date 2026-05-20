@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video_clipping_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist generated clips on the host system
+      - ./backend/clips:/app/clips
+      # Mount local temp files
+      - ./backend/temp:/app/temp
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: video_clipping_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always
