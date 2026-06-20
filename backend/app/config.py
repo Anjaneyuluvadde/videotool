@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Cleanup settings
     VIDEO_EXPIRY_HOURS: int = 4
     CLEANUP_INTERVAL_MINUTES: int = 10
+    MERGED_FILE_TTL: int = 3600
     
     # yt-dlp Configuration
     MAX_VIDEO_SIZE_MB: int = 500  # Safety threshold for downloads

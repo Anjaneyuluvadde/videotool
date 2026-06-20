@@ -217,8 +217,20 @@ async def merge_clips(request: MergeRequest):
             os.remove(cp)
             
     if not success or not os.path.exists(final_path):
+        logger.error("Failed to merge clips for merge request.")
         raise HTTPException(status_code=500, detail="Failed to merge clips.")
         
+    # Successfully merged! Delete temporary clips.
+    logger.info("Merge completed. Removing temporary clips.")
+    for clip_name in request.clips:
+        clip_path = os.path.join(settings.CLIP_DIR, clip_name)
+        if os.path.exists(clip_path):
+            try:
+                os.remove(clip_path)
+                logger.info(f"Deleted temporary clip: {clip_name}")
+            except Exception as e:
+                logger.warning(f"Could not remove temporary clip {clip_path}: {e}")
+                
     return {
         "final_video": f"/merged/{final_filename}"
     }

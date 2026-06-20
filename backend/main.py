@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import os
 
 from app.config import settings
@@ -35,6 +37,20 @@ app.mount("/merged", StaticFiles(directory=settings.MERGED_DIR), name="merged")
 
 # Include central routing
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    errors = []
+    for error in exc.errors():
+        loc = " -> ".join(str(l) for l in error.get("loc", []))
+        msg = error.get("msg", "Invalid value")
+        errors.append(f"{loc}: {msg}")
+    
+    error_msg = "; ".join(errors)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": f"Validation Error: {error_msg}"}
+    )
 
 @app.on_event("startup")
 async def startup_event():

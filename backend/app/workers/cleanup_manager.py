@@ -55,24 +55,47 @@ class CleanupManager:
 
     @staticmethod
     async def cleanup_expired_files() -> int:
-        """Delete expired files from configured directories."""
-        expiration_seconds = settings.VIDEO_EXPIRY_HOURS * 3600
+        """Delete expired files from configured directories, avoiding active job files."""
         now = time.time()
         expired_files_count = 0
-        target_dirs: List[str] = [
-            settings.CLIP_DIR,
-            settings.MERGED_DIR,
-            settings.TEMP_DIR,
-            settings.DOWNLOAD_DIR,
-        ]
+        
+        # Map each directory to its respective TTL
+        dir_expirations = {
+            settings.CLIP_DIR: settings.VIDEO_EXPIRY_HOURS * 3600,
+            settings.TEMP_DIR: settings.VIDEO_EXPIRY_HOURS * 3600,
+            settings.DOWNLOAD_DIR: settings.VIDEO_EXPIRY_HOURS * 3600,
+            settings.MERGED_DIR: settings.MERGED_FILE_TTL,
+        }
 
-        for directory in target_dirs:
+        # Query database to find all active job IDs to avoid deletion of processing resources
+        active_job_ids = set()
+        try:
+            from app.models.jobs import JobModel
+            all_jobs = JobModel.get_all_jobs()
+            for job in all_jobs:
+                if job.get("status") in ["pending", "downloading", "analyzing", "generating"]:
+                    active_job_ids.add(job.get("id"))
+        except Exception as exc:
+            logger.warning("Could not retrieve active jobs for cleanup checks: %s", exc)
+
+        for directory, expiration_seconds in dir_expirations.items():
             if not os.path.isdir(directory):
                 continue
 
             for root, _, files in os.walk(directory):
                 for filename in files:
                     file_path = os.path.join(root, filename)
+                    
+                    # Safe check: do not delete files belonging to active jobs
+                    is_active = False
+                    for active_id in active_job_ids:
+                        if active_id in filename:
+                            is_active = True
+                            break
+                    if is_active:
+                        logger.debug("Skipping active job file: %s", filename)
+                        continue
+
                     try:
                         modified_time = os.path.getmtime(file_path)
                     except OSError as exc:

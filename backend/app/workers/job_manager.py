@@ -2,6 +2,7 @@ import os
 import asyncio
 import json
 import uuid
+import random
 from typing import Dict, List, Any
 from app.config import settings
 from app.models.jobs import JobModel
@@ -111,29 +112,39 @@ class JobManager:
             # --- STAGE 3: Clip Generation (Scale & Pad to 9:16) (50% to 100%) ---
             JobModel.update_job(job_id, status="generating", progress=50.0)
             
-            # Calculate sequential clip segments and ensure no duration is lost.
+            # Calculate segments using fixed 10-second duration and random selection strategy for middle clips
             segments = []
-            full_chunks = int(duration // selected_duration)
-            remainder = duration - (full_chunks * selected_duration)
-            remainder = 0.0 if abs(remainder) < 1e-3 else remainder
-
-            if full_chunks == 0:
+            clip_dur = 10.0
+            
+            if duration <= clip_dur:
                 segments.append((0.0, duration))
             else:
-                for chunk_index in range(full_chunks):
-                    start_time = float(chunk_index * selected_duration)
-                    end_time = start_time + float(selected_duration)
-                    segments.append((start_time, end_time))
-
-                if remainder > 0:
-                    # Absorb any remaining seconds into the final clip, preserving exact total duration.
-                    last_start, last_end = segments[-1]
-                    segments[-1] = (last_start, last_end + remainder)
+                first_clip = (0.0, clip_dur)
+                start_last = max(clip_dur, duration - clip_dur)
+                last_clip = (start_last, duration)
+                
+                # Candidate middle clip start times
+                candidates = []
+                t = clip_dur
+                while t < start_last - 1e-3:
+                    candidates.append(t)
+                    t += clip_dur
+                    
+                if candidates:
+                    num_middle = random.randint(0, len(candidates))
+                    selected_starts = random.sample(candidates, num_middle)
+                    selected_starts.sort()
+                else:
+                    selected_starts = []
+                    
+                segments.append(first_clip)
+                for start in selected_starts:
+                    segments.append((start, min(start + clip_dur, duration)))
+                segments.append(last_clip)
 
             num_clips = len(segments)
             logger.info(
-                f"Job {job_id} - Total duration {duration}s, selected chunk {selected_duration}s, "
-                f"full_chunks={full_chunks}, remainder={remainder}s, generating {num_clips} clips..."
+                f"Job {job_id} - Total duration {duration}s, generating {num_clips} clips using random strategy..."
             )
             
             generated_clips = []
